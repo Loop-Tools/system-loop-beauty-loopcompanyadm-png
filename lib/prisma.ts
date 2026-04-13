@@ -1,6 +1,4 @@
 import { PrismaClient } from "@/lib/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import path from "node:path";
 import { withTenant } from "@/lib/prisma-tenant";
 
 const globalForPrisma = globalThis as unknown as {
@@ -8,12 +6,13 @@ const globalForPrisma = globalThis as unknown as {
   prismaTenant: ReturnType<typeof withTenant> | undefined;
 };
 
+/**
+ * Standard PrismaClient — no adapter. Reads DATABASE_URL via
+ * prisma.config.ts, which the LoopTools deploy engine injects with
+ * a Neon Postgres branch connection string.
+ */
 function createPrismaClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: path.join(process.cwd(), "dev.db"),
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new PrismaClient({ adapter } as any);
+  return new PrismaClient();
 }
 
 const rawPrisma = globalForPrisma.prisma ?? createPrismaClient();
