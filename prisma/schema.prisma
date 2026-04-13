@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  hashedPassword String
+  role           String   @default("admin") // admin | employee
+  employeeId     String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String   @default("#C9A96E")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments  Appointment[]
+  roomServices  RoomService[]
+  employeeRooms EmployeeRoom[]
+  blocks        ScheduleBlock[]
+}
+
+model Employee {
+  id        String   @id @default(cuid())
+  name      String
+  photoUrl  String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appointments          Appointment[]
+  employeeServices      EmployeeService[]
+  employeeRooms         EmployeeRoom[]
+  blocks                ScheduleBlock[]
+  commissionPayments    CommissionPayment[]
+  employeeGroupCommissions EmployeeGroupCommission[]
+  taskBoardMembers      TaskBoardMember[]
+}
+
+// Service groups (categories)
+model ServiceGroup {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  services                 Service[]
+  employeeGroupCommissions EmployeeGroupCommission[]
+}
+
+model Service {
+  id        String  @id @default(cuid())
+  name      String
+  duration  Int     // minutes
+  price     Float
+  active    Boolean @default(true)
+  groupId   String?
+  group     ServiceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appointments     Appointment[]
+  roomServices     RoomService[]
+  employeeServices EmployeeService[]
+}
+
+model Client {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String
+  address     String?
+  nif         String?
+  birthday    DateTime?
+  referredBy  String?
+  notes       String?
+  credit      Float    @default(0)
+  cashback    Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments    Appointment[]
+  clientNotes     ClientNote[]
+  clientFiles     ClientFile[]
+  clientAnamneses ClientAnamnesis[]
+}
+
+model Appointment {
+  id        String   @id @default(cuid())
+  date      DateTime
+  startTime String
+  endTime   String
+  status    String   @default("confirmed")
+  notes     String?
+  price     Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id])
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id])
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id])
+
+  commissionPayment CommissionPayment?
+
+  @@index([date, employeeId])
+  @@index([date, roomId])
+  @@index([clientId])
+}
+
+// Many-to-many: which services can be done in which rooms
+model RoomService {
+  id        String  @id @default(cuid())
+  roomId    String
+  room      Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, serviceId])
+}
+
+// Many-to-many: which employees can do which services (no commission here)
+model EmployeeService {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, serviceId])
+}
+
+// Commission per employee per service GROUP
+model EmployeeGroupCommission {
+  id             String       @id @default(cuid())
+  employeeId     String
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  serviceGroupId String
+  serviceGroup   ServiceGroup @relation(fields: [serviceGroupId], references: [id], onDelete: Cascade)
+  commissionRate Float        @default(0) // percentage 0-100
+
+  @@unique([employeeId, serviceGroupId])
+}
+
+// Many-to-many: which employees can work in which rooms
+model EmployeeRoom {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, roomId])
+}
+
+// Schedule blocking
+model ScheduleBlock {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roomId     String?
+  room       Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  startDate  DateTime
+  endDate    DateTime
+  startTime  String?
+  endTime    String?
+  allDay     Boolean  @default(false)
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, startDate, endDate])
+}
+
+// Commission payments tracking
+model CommissionPayment {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  appointmentId String   @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  servicePrice  Float
+  commissionRate Float
+  commissionValue Float
+  status        String   @default("pending")
+  paidAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([employeeId, status])
+}
+
+// Client notes
+model ClientNote {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Client files/photos
+model ClientFile {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  type      String
+  takenAt   DateTime?
+  createdAt DateTime @default(now())
+}
+
+// Anamnesis templates
+model AnamnesisTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  fields    String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clientAnamneses ClientAnamnesis[]
+}
+
+// Filled anamnesis for a client
+model ClientAnamnesis {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  templateId String
+  template   AnamnesisTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  answers    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+model ClinicSettings {
+  id               String @id @default("singleton")
+  clinicName       String @default("Clínica de Estética")
+  phone            String @default("")
+  address          String @default("")
+  logoUrl          String?
+  slotInterval     Int    @default(30)
+  whatsappTemplate String @default("Olá {nome}! Seu agendamento na {clinica} está confirmado para {data} às {horario}. Serviço: {servico}. Aguardamos você!")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model BusinessHours {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  openTime  String
+  closeTime String
+  isOpen    Boolean @default(true)
+
+  @@unique([dayOfWeek])
+}
+
+model TaskBoard {
+  id        String   @id @default(cuid())
+  name      String
+  order     Int      @default(0)
+  color     String   @default("#C9A96E")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks   Task[]
+  members TaskBoardMember[]
+}
+
+// Which employees can see/access this board
+model TaskBoardMember {
+  id         String    @id @default(cuid())
+  boardId    String
+  board      TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([boardId, employeeId])
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  order       Int       @default(0)
+  boardId     String
+  board       TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  assignee    String?
+  dueDate     DateTime?
+  priority    String    @default("medium")
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  checklists    TaskChecklist[]
+  attachments   TaskAttachment[]
+  labels        TaskLabel[]
+  comments      TaskComment[]
+
+  @@index([boardId])
+}
+
+model TaskChecklist {
+  id     String  @id @default(cuid())
+  taskId String
+  task   Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  name   String  @default("Checklist")
+  items  String  // JSON: [{text: string, checked: boolean}]
+
+  @@index([taskId])
+}
+
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  filename  String
+  url       String
+  type      String   // image | document
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
+
+model TaskLabel {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  name   String
+  color  String @default("#C9A96E")
+
+  @@index([taskId])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+}
