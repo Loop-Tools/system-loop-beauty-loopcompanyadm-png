@@ -19,6 +19,7 @@
   ],
   "has_database": true,
   "has_seed": true,
+  "admin_path": "/admin/login",
   "multitenancy": {
     "tables_protected": [
       "User",
