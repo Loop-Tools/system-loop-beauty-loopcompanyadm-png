@@ -7,12 +7,15 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 /**
- * Standard PrismaClient — no adapter. Reads DATABASE_URL via
- * prisma.config.ts, which the LoopTools deploy engine injects with
- * a Neon Postgres branch connection string.
+ * Standard PrismaClient. Prisma 7's new `prisma-client` generator
+ * requires non-empty options at construction, so we pass the URL
+ * explicitly. Value comes from DATABASE_URL, which the LoopTools
+ * deploy engine injects with a Neon Postgres branch connection.
  */
 function createPrismaClient() {
-  return new PrismaClient();
+  return new PrismaClient({
+    datasourceUrl: process.env.DATABASE_URL,
+  });
 }
 
 const rawPrisma = globalForPrisma.prisma ?? createPrismaClient();

@@ -20,7 +20,9 @@ async function bootstrap() {
     return;
   }
 
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({
+    datasourceUrl: process.env.DATABASE_URL,
+  });
 
   try {
     const existing = await prisma.user.findFirst({
