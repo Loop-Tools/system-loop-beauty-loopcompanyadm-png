@@ -7,6 +7,7 @@
  * injected (a Neon branch in practice).
  */
 import { PrismaClient } from "../lib/generated/prisma/client";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import bcrypt from "bcryptjs";
 
 async function bootstrap() {
@@ -20,9 +21,10 @@ async function bootstrap() {
     return;
   }
 
-  const prisma = new PrismaClient({
-    datasourceUrl: process.env.DATABASE_URL,
+  const adapter = new PrismaNeon({
+    connectionString: process.env.DATABASE_URL,
   });
+  const prisma = new PrismaClient({ adapter });
 
   try {
     const existing = await prisma.user.findFirst({

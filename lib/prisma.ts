@@ -1,4 +1,5 @@
 import { PrismaClient } from "@/lib/generated/prisma/client";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { withTenant } from "@/lib/prisma-tenant";
 
 const globalForPrisma = globalThis as unknown as {
@@ -7,15 +8,18 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 /**
- * Standard PrismaClient. Prisma 7's new `prisma-client` generator
- * requires non-empty options at construction, so we pass the URL
- * explicitly. Value comes from DATABASE_URL, which the LoopTools
- * deploy engine injects with a Neon Postgres branch connection.
+ * PrismaClient with the Neon serverless adapter. Required because
+ * Prisma 7's `prisma-client` generator no longer accepts
+ * `datasourceUrl` — you must pass an adapter. The Neon adapter
+ * uses HTTP/WebSocket transport which is fast on cold starts and
+ * works natively with the Neon connection strings the LoopTools
+ * deploy engine injects.
  */
 function createPrismaClient() {
-  return new PrismaClient({
-    datasourceUrl: process.env.DATABASE_URL,
+  const adapter = new PrismaNeon({
+    connectionString: process.env.DATABASE_URL,
   });
+  return new PrismaClient({ adapter });
 }
 
 const rawPrisma = globalForPrisma.prisma ?? createPrismaClient();
