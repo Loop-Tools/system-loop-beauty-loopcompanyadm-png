@@ -16,7 +16,7 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email e senha são obrigatórios");
         }
 
-        const user = await prisma.user.findUnique({
+        const user = await prisma.user.findFirst({
           where: { email: credentials.email },
         });
 

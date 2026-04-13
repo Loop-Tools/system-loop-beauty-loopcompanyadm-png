@@ -9,107 +9,129 @@ datasource db {
 
 model User {
   id             String   @id @default(cuid())
+  organizationId String
   name           String
-  email          String   @unique
+  email          String
   hashedPassword String
   role           String   @default("admin") // admin | employee
   employeeId     String?  @unique
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@unique([email, organizationId])
+  @@index([organizationId])
 }
 
 model Room {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  color       String   @default("#C9A96E")
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  color          String   @default("#C9A96E")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   appointments  Appointment[]
   roomServices  RoomService[]
   employeeRooms EmployeeRoom[]
   blocks        ScheduleBlock[]
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
 }
 
 model Employee {
-  id        String   @id @default(cuid())
-  name      String
-  photoUrl  String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  photoUrl       String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  appointments          Appointment[]
-  employeeServices      EmployeeService[]
-  employeeRooms         EmployeeRoom[]
-  blocks                ScheduleBlock[]
-  commissionPayments    CommissionPayment[]
+  appointments             Appointment[]
+  employeeServices         EmployeeService[]
+  employeeRooms            EmployeeRoom[]
+  blocks                   ScheduleBlock[]
+  commissionPayments       CommissionPayment[]
   employeeGroupCommissions EmployeeGroupCommission[]
-  taskBoardMembers      TaskBoardMember[]
+  taskBoardMembers         TaskBoardMember[]
+
+  @@index([organizationId])
 }
 
 // Service groups (categories)
 model ServiceGroup {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  order     Int      @default(0)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  order          Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   services                 Service[]
   employeeGroupCommissions EmployeeGroupCommission[]
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
 }
 
 model Service {
-  id        String  @id @default(cuid())
-  name      String
-  duration  Int     // minutes
-  price     Float
-  active    Boolean @default(true)
-  groupId   String?
-  group     ServiceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  duration       Int      // minutes
+  price          Float
+  active         Boolean  @default(true)
+  groupId        String?
+  group          ServiceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   appointments     Appointment[]
   roomServices     RoomService[]
   employeeServices EmployeeService[]
+
+  @@index([organizationId])
 }
 
 model Client {
-  id          String   @id @default(cuid())
-  name        String
-  email       String?
-  phone       String
-  address     String?
-  nif         String?
-  birthday    DateTime?
-  referredBy  String?
-  notes       String?
-  credit      Float    @default(0)
-  cashback    Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  email          String?
+  phone          String
+  address        String?
+  nif            String?
+  birthday       DateTime?
+  referredBy     String?
+  notes          String?
+  credit         Float    @default(0)
+  cashback       Float    @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   appointments    Appointment[]
   clientNotes     ClientNote[]
   clientFiles     ClientFile[]
   clientAnamneses ClientAnamnesis[]
+
+  @@index([organizationId])
 }
 
 model Appointment {
-  id        String   @id @default(cuid())
-  date      DateTime
-  startTime String
-  endTime   String
-  status    String   @default("confirmed")
-  notes     String?
-  price     Float?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  date           DateTime
+  startTime      String
+  endTime        String
+  status         String   @default("confirmed")
+  notes          String?
+  price          Float?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   clientId   String
   client     Client   @relation(fields: [clientId], references: [id])
@@ -125,6 +147,7 @@ model Appointment {
   @@index([date, employeeId])
   @@index([date, roomId])
   @@index([clientId])
+  @@index([organizationId])
 }
 
 // Many-to-many: which services can be done in which rooms
@@ -174,119 +197,140 @@ model EmployeeRoom {
 
 // Schedule blocking
 model ScheduleBlock {
-  id         String   @id @default(cuid())
-  employeeId String
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  roomId     String?
-  room       Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  startDate  DateTime
-  endDate    DateTime
-  startTime  String?
-  endTime    String?
-  allDay     Boolean  @default(false)
-  reason     String?
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String
+  employeeId     String
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roomId         String?
+  room           Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  startDate      DateTime
+  endDate        DateTime
+  startTime      String?
+  endTime        String?
+  allDay         Boolean  @default(false)
+  reason         String?
+  createdAt      DateTime @default(now())
 
   @@index([employeeId, startDate, endDate])
+  @@index([organizationId])
 }
 
 // Commission payments tracking
 model CommissionPayment {
-  id            String   @id @default(cuid())
-  employeeId    String
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  appointmentId String   @unique
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  servicePrice  Float
-  commissionRate Float
+  id              String    @id @default(cuid())
+  organizationId  String
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  appointmentId   String    @unique
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  servicePrice    Float
+  commissionRate  Float
   commissionValue Float
-  status        String   @default("pending")
-  paidAt        DateTime?
-  createdAt     DateTime @default(now())
+  status          String    @default("pending")
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
 
   @@index([employeeId, status])
+  @@index([organizationId])
 }
 
 // Client notes
 model ClientNote {
-  id        String   @id @default(cuid())
-  clientId  String
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  content        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 // Client files/photos
 model ClientFile {
-  id        String   @id @default(cuid())
-  clientId  String
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  filename  String
-  url       String
-  type      String
-  takenAt   DateTime?
-  createdAt DateTime @default(now())
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  client         Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  filename       String
+  url            String
+  type           String
+  takenAt        DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([organizationId])
 }
 
 // Anamnesis templates
 model AnamnesisTemplate {
-  id        String   @id @default(cuid())
-  name      String
-  fields    String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  fields         String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   clientAnamneses ClientAnamnesis[]
+
+  @@index([organizationId])
 }
 
 // Filled anamnesis for a client
 model ClientAnamnesis {
-  id         String   @id @default(cuid())
-  clientId   String
-  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  templateId String
-  template   AnamnesisTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  answers    String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String            @id @default(cuid())
+  organizationId String
+  clientId       String
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  templateId     String
+  template       AnamnesisTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  answers        String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@index([clientId])
+  @@index([organizationId])
 }
 
 model ClinicSettings {
-  id               String @id @default("singleton")
-  clinicName       String @default("Clínica de Estética")
-  phone            String @default("")
-  address          String @default("")
+  id               String   @id @default(cuid())
+  organizationId   String   @unique
+  clinicName       String   @default("Clínica de Estética")
+  phone            String   @default("")
+  address          String   @default("")
   logoUrl          String?
-  slotInterval     Int    @default(30)
-  whatsappTemplate String @default("Olá {nome}! Seu agendamento na {clinica} está confirmado para {data} às {horario}. Serviço: {servico}. Aguardamos você!")
+  slotInterval     Int      @default(30)
+  whatsappTemplate String   @default("Olá {nome}! Seu agendamento na {clinica} está confirmado para {data} às {horario}. Serviço: {servico}. Aguardamos você!")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
 
 model BusinessHours {
-  id        String  @id @default(cuid())
-  dayOfWeek Int
-  openTime  String
-  closeTime String
-  isOpen    Boolean @default(true)
+  id             String  @id @default(cuid())
+  organizationId String
+  dayOfWeek      Int
+  openTime       String
+  closeTime      String
+  isOpen         Boolean @default(true)
 
-  @@unique([dayOfWeek])
+  @@unique([dayOfWeek, organizationId])
+  @@index([organizationId])
 }
 
 model TaskBoard {
-  id        String   @id @default(cuid())
-  name      String
-  order     Int      @default(0)
-  color     String   @default("#C9A96E")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  order          Int      @default(0)
+  color          String   @default("#C9A96E")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   tasks   Task[]
   members TaskBoardMember[]
+
+  @@index([organizationId])
 }
 
 // Which employees can see/access this board
@@ -301,25 +345,27 @@ model TaskBoardMember {
 }
 
 model Task {
-  id          String    @id @default(cuid())
-  title       String
-  description String?
-  order       Int       @default(0)
-  boardId     String
-  board       TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  assignee    String?
-  dueDate     DateTime?
-  priority    String    @default("medium")
-  completed   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  organizationId String
+  title          String
+  description    String?
+  order          Int       @default(0)
+  boardId        String
+  board          TaskBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  assignee       String?
+  dueDate        DateTime?
+  priority       String    @default("medium")
+  completed      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  checklists    TaskChecklist[]
-  attachments   TaskAttachment[]
-  labels        TaskLabel[]
-  comments      TaskComment[]
+  checklists  TaskChecklist[]
+  attachments TaskAttachment[]
+  labels      TaskLabel[]
+  comments    TaskComment[]
 
   @@index([boardId])
+  @@index([organizationId])
 }
 
 model TaskChecklist {

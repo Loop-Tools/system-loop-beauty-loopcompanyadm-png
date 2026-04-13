@@ -62,7 +62,7 @@ export async function GET() {
   ]);
 
   const settings = await prisma.clinicSettings.findFirst();
-  const businessHours = await prisma.businessHours.findUnique({
+  const businessHours = await prisma.businessHours.findFirst({
     where: { dayOfWeek: today.getUTCDay() },
   });
 

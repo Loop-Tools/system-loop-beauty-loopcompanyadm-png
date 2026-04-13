@@ -1,6 +1,5 @@
 import prismaModule from "../lib/generated/prisma/client.js";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import path from "node:path";
 
@@ -8,29 +7,32 @@ const { PrismaClient } = prismaModule as any;
 const adapter = new PrismaBetterSqlite3({ url: path.resolve("dev.db") });
 const prisma = new PrismaClient({ adapter });
 
+const ORG_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "local-dev-org";
+
 async function main() {
-  console.log("Seeding database...");
+  console.log(`Seeding database for organization: ${ORG_ID}`);
 
   // 1. Admin user
   const hashedPassword = await bcrypt.hash("admin123", 10);
   await prisma.user.upsert({
-    where: { email: "admin@clinica.com" },
+    where: { email_organizationId: { email: "admin@clinica.com", organizationId: ORG_ID } },
     update: {},
     create: {
       name: "Administrador",
       email: "admin@clinica.com",
       hashedPassword,
       role: "admin",
+      organizationId: ORG_ID,
     },
   });
   console.log("Admin user created: admin@clinica.com / admin123");
 
   // 2. Clinic Settings
   await prisma.clinicSettings.upsert({
-    where: { id: "singleton" },
+    where: { organizationId: ORG_ID },
     update: {},
     create: {
-      id: "singleton",
+      organizationId: ORG_ID,
       clinicName: "[NOME DA CLÍNICA]",
       phone: "+351 912 345 678",
       address: "Rua Exemplo, 123 - Lisboa",
@@ -54,50 +56,50 @@ async function main() {
 
   for (const h of hours) {
     await prisma.businessHours.upsert({
-      where: { dayOfWeek: h.dayOfWeek },
+      where: { dayOfWeek_organizationId: { dayOfWeek: h.dayOfWeek, organizationId: ORG_ID } },
       update: h,
-      create: h,
+      create: { ...h, organizationId: ORG_ID },
     });
   }
   console.log("Business hours created");
 
   // 4. Rooms
   const salaDepilacao = await prisma.room.upsert({
-    where: { name: "Sala de Depilação Laser" },
+    where: { name_organizationId: { name: "Sala de Depilação Laser", organizationId: ORG_ID } },
     update: {},
-    create: { name: "Sala de Depilação Laser", description: "Sala equipada com laser de última geração", color: "#C9A96E" },
+    create: { name: "Sala de Depilação Laser", description: "Sala equipada com laser de última geração", color: "#C9A96E", organizationId: ORG_ID },
   });
   const salaFacial = await prisma.room.upsert({
-    where: { name: "Sala Facial" },
+    where: { name_organizationId: { name: "Sala Facial", organizationId: ORG_ID } },
     update: {},
-    create: { name: "Sala Facial", description: "Sala para tratamentos faciais e limpeza de pele", color: "#D4AF37" },
+    create: { name: "Sala Facial", description: "Sala para tratamentos faciais e limpeza de pele", color: "#D4AF37", organizationId: ORG_ID },
   });
   const salaCorporal = await prisma.room.upsert({
-    where: { name: "Sala Corporal" },
+    where: { name_organizationId: { name: "Sala Corporal", organizationId: ORG_ID } },
     update: {},
-    create: { name: "Sala Corporal", description: "Sala para tratamentos corporais e drenagem", color: "#B8860B" },
+    create: { name: "Sala Corporal", description: "Sala para tratamentos corporais e drenagem", color: "#B8860B", organizationId: ORG_ID },
   });
   const salaMassagem = await prisma.room.upsert({
-    where: { name: "Sala de Massagem" },
+    where: { name_organizationId: { name: "Sala de Massagem", organizationId: ORG_ID } },
     update: {},
-    create: { name: "Sala de Massagem", description: "Sala para massagens relaxantes e terapêuticas", color: "#DAA520" },
+    create: { name: "Sala de Massagem", description: "Sala para massagens relaxantes e terapêuticas", color: "#DAA520", organizationId: ORG_ID },
   });
   console.log("Rooms created");
 
   // 5. Service Groups
-  const grupoDepilacao = await prisma.serviceGroup.create({ data: { name: "Depilação Laser", order: 1 } });
-  const grupoFacial = await prisma.serviceGroup.create({ data: { name: "Tratamentos Faciais", order: 2 } });
-  const grupoCorporal = await prisma.serviceGroup.create({ data: { name: "Tratamentos Corporais", order: 3 } });
-  const grupoMassagem = await prisma.serviceGroup.create({ data: { name: "Massagens", order: 4 } });
+  const grupoDepilacao = await prisma.serviceGroup.create({ data: { name: "Depilação Laser", order: 1, organizationId: ORG_ID } });
+  const grupoFacial = await prisma.serviceGroup.create({ data: { name: "Tratamentos Faciais", order: 2, organizationId: ORG_ID } });
+  const grupoCorporal = await prisma.serviceGroup.create({ data: { name: "Tratamentos Corporais", order: 3, organizationId: ORG_ID } });
+  const grupoMassagem = await prisma.serviceGroup.create({ data: { name: "Massagens", order: 4, organizationId: ORG_ID } });
   console.log("Service groups created");
 
   // 6. Services (inside groups)
-  const depilacaoPernas = await prisma.service.create({ data: { name: "Depilação Laser Pernas", duration: 60, price: 120.0, groupId: grupoDepilacao.id } });
-  const depilacaoAxilas = await prisma.service.create({ data: { name: "Depilação Laser Axilas", duration: 30, price: 60.0, groupId: grupoDepilacao.id } });
-  const limpezaPele = await prisma.service.create({ data: { name: "Limpeza de Pele", duration: 50, price: 80.0, groupId: grupoFacial.id } });
-  const microagulhamento = await prisma.service.create({ data: { name: "Microagulhamento", duration: 60, price: 95.0, groupId: grupoFacial.id } });
-  const drenagem = await prisma.service.create({ data: { name: "Drenagem Linfática", duration: 60, price: 75.0, groupId: grupoCorporal.id } });
-  const massagemServ = await prisma.service.create({ data: { name: "Massagem Relaxante", duration: 60, price: 70.0, groupId: grupoMassagem.id } });
+  const depilacaoPernas = await prisma.service.create({ data: { name: "Depilação Laser Pernas", duration: 60, price: 120.0, groupId: grupoDepilacao.id, organizationId: ORG_ID } });
+  const depilacaoAxilas = await prisma.service.create({ data: { name: "Depilação Laser Axilas", duration: 30, price: 60.0, groupId: grupoDepilacao.id, organizationId: ORG_ID } });
+  const limpezaPele = await prisma.service.create({ data: { name: "Limpeza de Pele", duration: 50, price: 80.0, groupId: grupoFacial.id, organizationId: ORG_ID } });
+  const microagulhamento = await prisma.service.create({ data: { name: "Microagulhamento", duration: 60, price: 95.0, groupId: grupoFacial.id, organizationId: ORG_ID } });
+  const drenagem = await prisma.service.create({ data: { name: "Drenagem Linfática", duration: 60, price: 75.0, groupId: grupoCorporal.id, organizationId: ORG_ID } });
+  const massagemServ = await prisma.service.create({ data: { name: "Massagem Relaxante", duration: 60, price: 70.0, groupId: grupoMassagem.id, organizationId: ORG_ID } });
   console.log("Services created");
 
   // 7. Room-Service relations
@@ -114,9 +116,9 @@ async function main() {
   console.log("Room-Service relations created");
 
   // 8. Employees
-  const giovanna = await prisma.employee.create({ data: { name: "Giovanna" } });
-  const ana = await prisma.employee.create({ data: { name: "Ana" } });
-  const carla = await prisma.employee.create({ data: { name: "Carla" } });
+  const giovanna = await prisma.employee.create({ data: { name: "Giovanna", organizationId: ORG_ID } });
+  const ana = await prisma.employee.create({ data: { name: "Ana", organizationId: ORG_ID } });
+  const carla = await prisma.employee.create({ data: { name: "Carla", organizationId: ORG_ID } });
   console.log("Employees created");
 
   // 9. Employee-Room relations
@@ -134,7 +136,7 @@ async function main() {
   });
   console.log("Employee-Room relations created");
 
-  // 10. Employee-Service relations (no commission here, just which services they do)
+  // 10. Employee-Service relations
   await prisma.employeeService.createMany({
     data: [
       { employeeId: giovanna.id, serviceId: depilacaoPernas.id },
@@ -153,7 +155,7 @@ async function main() {
   });
   console.log("Employee-Service relations created");
 
-  // 11. Employee-Group Commissions (commission per GROUP)
+  // 11. Employee-Group Commissions
   await prisma.employeeGroupCommission.createMany({
     data: [
       { employeeId: giovanna.id, serviceGroupId: grupoDepilacao.id, commissionRate: 30 },
@@ -171,6 +173,7 @@ async function main() {
   // 12. Anamnesis template
   await prisma.anamnesisTemplate.create({
     data: {
+      organizationId: ORG_ID,
       name: "Anamnese Geral de Estética",
       fields: JSON.stringify([
         { label: "Possui alguma alergia?", type: "text", required: true },

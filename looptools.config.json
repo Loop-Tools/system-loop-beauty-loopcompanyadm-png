@@ -1,0 +1,45 @@
+{
+  "name": "Clínica Estética",
+  "slug": "clinica-estetica",
+  "description": "Sistema de gestão para clínicas de estética — agenda, clientes, anamnese, comissões e serviços.",
+  "category": "Estética",
+  "stack": "Next.js",
+  "price_monthly": 49,
+  "features": [
+    "Agenda e agendamentos",
+    "Gestão de clientes e anamnese",
+    "Comissões e funcionárias",
+    "Salas e serviços",
+    "Relatórios e dashboard",
+    "Agendamento online público"
+  ],
+  "env_vars_required": [
+    "NEXTAUTH_URL",
+    "NEXTAUTH_SECRET"
+  ],
+  "has_database": true,
+  "has_seed": true,
+  "multitenancy": {
+    "tables_protected": [
+      "User",
+      "Room",
+      "Employee",
+      "ServiceGroup",
+      "Service",
+      "Client",
+      "Appointment",
+      "ScheduleBlock",
+      "CommissionPayment",
+      "ClientNote",
+      "ClientFile",
+      "AnamnesisTemplate",
+      "ClientAnamnesis",
+      "ClinicSettings",
+      "BusinessHours",
+      "TaskBoard",
+      "Task"
+    ],
+    "customizable_by_ai": ["labels", "cores", "módulos visíveis"],
+    "not_customizable": ["lógica de negócio", "estrutura da BD"]
+  }
+}

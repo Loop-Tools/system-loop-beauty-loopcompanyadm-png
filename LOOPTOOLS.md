@@ -20,36 +20,44 @@ nenhum. Confirma quando cada passo estiver concluído.
 
 O LoopTools usa um modelo **multi-tenant** — vários compradores usam
 o mesmo sistema mas com dados completamente isolados. O isolamento é
-garantido por `organization_id` em todas as tabelas, protegido por
-Row Level Security (RLS) no Supabase.
+obrigatório e pode ser implementado em qualquer stack (Supabase,
+Prisma + SQLite/Postgres/MySQL, Drizzle, raw SQL, etc.).
+
+O requisito é: **toda query à base de dados tem que ser filtrada por
+`organization_id`**. Como garantes isso depende da tua stack.
 
 ---
 
 ## Passo 1 — Análise do projecto
 
-Analisa o projecto actual e identifica:
+Identifica:
 
-- Todas as tabelas existentes (olha para `supabase/migrations/`
-  ou `prisma/schema.prisma`)
-- Stack técnica (Next.js, Prisma, Supabase, Drizzle, etc.)
+- Todas as tabelas/modelos existentes
+- Stack técnica (Next.js + Supabase, Prisma + SQLite, Drizzle, etc.)
+- Auth (Supabase Auth, NextAuth, Clerk, custom…)
 - Se já existe um campo `organization_id` em alguma tabela
-- Quais rotas/endpoints acedem à base de dados
 
-Se o projecto já tem multi-tenancy, salta directo para o Passo 6.
+Escolhe a abordagem correcta do Passo 2 conforme a stack:
+
+| Stack | Abordagem recomendada |
+|---|---|
+| Supabase + Postgres | RLS (Row Level Security) — opção A |
+| Prisma (qualquer DB) | Middleware de Prisma — opção B |
+| Drizzle | Filtro automático via helper — opção C |
+| Raw SQL / outros | Garantir WHERE organization_id em todas as queries |
 
 ---
 
-## Passo 2 — Migration de multi-tenancy
+## Passo 2 — Implementar multi-tenancy
 
-Cria um novo ficheiro `supabase/migrations/looptools_multitenancy.sql`
-com este conteúdo (adapta à lista real de tabelas do projecto):
+### Opção A — Supabase + Postgres (RLS)
+
+Cria `supabase/migrations/looptools_multitenancy.sql`:
 
 ```sql
 -- Adiciona organization_id a todas as tabelas do tenant
 alter table public.TABELA_1
   add column if not exists organization_id uuid;
-
--- Repete para cada tabela...
 
 -- Função helper: devolve o organization_id do request actual
 create or replace function public.get_organization_id()
@@ -63,10 +71,8 @@ as $$
   )::uuid;
 $$;
 
--- Activa RLS em cada tabela
+-- Activa RLS e policies em cada tabela
 alter table public.TABELA_1 enable row level security;
-
--- Policies por tabela
 create policy "tenant_select" on public.TABELA_1
   for select using (organization_id = public.get_organization_id());
 create policy "tenant_insert" on public.TABELA_1
@@ -75,9 +81,117 @@ create policy "tenant_update" on public.TABELA_1
   for update using (organization_id = public.get_organization_id());
 create policy "tenant_delete" on public.TABELA_1
   for delete using (organization_id = public.get_organization_id());
-
--- Repete as 4 policies para cada tabela
 ```
+
+### Opção B — Prisma + qualquer DB (SQLite, Postgres, MySQL)
+
+1. Adiciona `organizationId` ao schema e cria migration:
+
+```prisma
+model Cliente {
+  id             String @id @default(cuid())
+  organizationId String
+  // ... outros campos
+
+  @@index([organizationId])
+}
+```
+
+```bash
+npx prisma migrate dev --name add_organization_id
+```
+
+2. Cria `src/lib/prisma-tenant.ts` com middleware que força o filtro:
+
+```ts
+import { PrismaClient } from "@prisma/client";
+
+const TENANT_MODELS = ["Cliente", "Projecto", "Tarefa"]; // adapta
+
+export function tenantPrisma(organizationId: string) {
+  const client = new PrismaClient();
+  return client.$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          if (!model || !TENANT_MODELS.includes(model)) {
+            return query(args);
+          }
+
+          // Reads — inject WHERE organization_id
+          if (
+            operation === "findFirst" ||
+            operation === "findMany" ||
+            operation === "findUnique" ||
+            operation === "count" ||
+            operation === "aggregate"
+          ) {
+            args.where = { ...args.where, organizationId };
+          }
+
+          // Writes — inject on data and WHERE
+          if (operation === "create") {
+            args.data = { ...args.data, organizationId };
+          }
+          if (operation === "createMany") {
+            args.data = (args.data as any[]).map((d) => ({
+              ...d,
+              organizationId,
+            }));
+          }
+          if (
+            operation === "update" ||
+            operation === "updateMany" ||
+            operation === "delete" ||
+            operation === "deleteMany"
+          ) {
+            args.where = { ...args.where, organizationId };
+          }
+
+          return query(args);
+        },
+      },
+    },
+  });
+}
+```
+
+3. Em cada route/server-action, usa `tenantPrisma(orgId)` em vez de
+`prisma` directo:
+
+```ts
+import { tenantPrisma } from "@/lib/prisma-tenant";
+
+export async function getClientes() {
+  const db = tenantPrisma(process.env.NEXT_PUBLIC_ORGANIZATION_ID!);
+  return db.cliente.findMany();
+}
+```
+
+### Opção C — Drizzle
+
+Cria um helper que injecta `organizationId` automaticamente:
+
+```ts
+import { eq, and, type SQL } from "drizzle-orm";
+
+const orgId = process.env.NEXT_PUBLIC_ORGANIZATION_ID!;
+
+export function tenantWhere(extra?: SQL) {
+  const base = eq(clientes.organizationId, orgId);
+  return extra ? and(base, extra) : base;
+}
+
+// Uso:
+await db.select().from(clientes).where(tenantWhere());
+await db.insert(clientes).values({ ...data, organizationId: orgId });
+```
+
+### Opção D — Raw SQL / outros
+
+Garante que **todas** as queries incluem `WHERE organization_id = ?`.
+Considera encapsular num helper único para não esqueceres em nenhum
+ponto.
 
 ---
 
@@ -92,18 +206,28 @@ NEXT_PUBLIC_ORGANIZATION_NAME=
 NEXT_PUBLIC_ORGANIZATION_SLUG=
 NEXT_PUBLIC_LOOPTOOLS_SYSTEM=true
 
-# Supabase (LoopTools partilhado)
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
 # Admin inicial — LoopTools injecta com os dados do comprador.
 # O teu sistema deve criar um user admin com estes dados na
-# primeira inicialização (ver Passo 5).
+# primeira inicialização (ver Passo 5b).
 INITIAL_ADMIN_EMAIL=
 INITIAL_ADMIN_PASSWORD=
 INITIAL_ADMIN_NAME=
 ```
+
+**Se usas Supabase**, adiciona também:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+**Se usas Prisma + SQLite**, basta manter o teu `DATABASE_URL`
+existente. LoopTools não interfere com isso.
+
+Outras variáveis que o teu sistema precisa (API keys, etc.) devem
+estar no `.env.example` também — os compradores vão configurá-las
+no painel da Vercel após o deploy.
 
 ---
 
@@ -169,12 +293,12 @@ O comprador recebe estes dados por email e espera poder **fazer
 login imediatamente**. O teu sistema tem que criar este user
 automaticamente. Tens duas opções:
 
-### Opção A — Via boot script (recomendado)
+### Opção A — Prisma + NextAuth + bcrypt (stack tipo Members Flix)
 
-Cria `scripts/bootstrap-admin.ts` que corre no primeiro boot:
+Cria `scripts/bootstrap-admin.ts`:
 
 ```ts
-import { createClient } from "@supabase/supabase-js";
+import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 async function bootstrap() {
@@ -183,32 +307,35 @@ async function bootstrap() {
   const name = process.env.INITIAL_ADMIN_NAME;
   const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID;
 
-  if (!email || !password || !organizationId) return;
+  if (!email || !password || !organizationId) {
+    console.log("[bootstrap] skipping — not a LoopTools instance");
+    return;
+  }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const prisma = new PrismaClient();
 
-  // Check if admin already exists for this tenant
-  const { data: existing } = await supabase
-    .from("users")
-    .select("id")
-    .eq("email", email)
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (existing) return;
-
-  // Create the admin user
-  const hashedPassword = await bcrypt.hash(password, 10);
-  await supabase.from("users").insert({
-    email,
-    password: hashedPassword,
-    name: name ?? email,
-    role: "admin",
-    organization_id: organizationId,
+  // Check if admin already exists
+  const existing = await prisma.user.findFirst({
+    where: { email, organizationId },
   });
+  if (existing) {
+    console.log("[bootstrap] admin user already exists");
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  await prisma.user.create({
+    data: {
+      email,
+      hashedPassword,
+      name: name ?? email,
+      role: "admin",
+      organizationId,
+    },
+  });
+
+  console.log(`[bootstrap] created admin ${email}`);
+  await prisma.$disconnect();
 }
 
 bootstrap().catch(console.error);
@@ -218,15 +345,22 @@ Adiciona ao `package.json`:
 
 ```json
 "scripts": {
-  "build": "tsx scripts/bootstrap-admin.ts && next build"
+  "build": "prisma migrate deploy && tsx scripts/bootstrap-admin.ts && next build"
 }
 ```
 
-### Opção B — Via Supabase Auth (se usas Supabase Auth)
+### Opção B — Supabase Auth
 
-Se o teu sistema usa `supabase.auth`, cria o user via Admin API:
+Se usas `@supabase/auth`, cria o user via Admin API:
 
 ```ts
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 await supabase.auth.admin.createUser({
   email,
   password,
@@ -235,8 +369,12 @@ await supabase.auth.admin.createUser({
 });
 ```
 
-Corre este código no build step ou numa função que é chamada
-apenas no primeiro deploy.
+### Opção C — Custom auth / outras stacks
+
+Adapta o princípio: no build step do teu sistema, cria um user
+administrador com os dados das env vars `INITIAL_ADMIN_*` se
+ainda não existir. O importante é que o user seja criado **antes**
+da primeira tentativa de login do comprador.
 
 ### Se não implementares este passo
 

@@ -1,9 +1,11 @@
 import { PrismaClient } from "@/lib/generated/prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import path from "node:path";
+import { withTenant } from "@/lib/prisma-tenant";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaTenant: ReturnType<typeof withTenant> | undefined;
 };
 
 function createPrismaClient() {
@@ -14,6 +16,17 @@ function createPrismaClient() {
   return new PrismaClient({ adapter } as any);
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
+const rawPrisma = globalForPrisma.prisma ?? createPrismaClient();
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = rawPrisma;
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID;
+
+export const prismaRaw = rawPrisma;
+
+export const prisma = organizationId
+  ? (globalForPrisma.prismaTenant ??= withTenant(rawPrisma, organizationId))
+  : rawPrisma;
+
+if (process.env.NODE_ENV !== "production" && organizationId) {
+  globalForPrisma.prismaTenant = prisma as ReturnType<typeof withTenant>;
+}

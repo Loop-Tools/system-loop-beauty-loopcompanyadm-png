@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Check if email already in use by another user
-  const existingUser = await prisma.user.findUnique({ where: { email } });
+  const existingUser = await prisma.user.findFirst({ where: { email } });
   if (existingUser && existingUser.employeeId !== employeeId) {
     return NextResponse.json({ error: "Este email já está em uso" }, { status: 409 });
   }
