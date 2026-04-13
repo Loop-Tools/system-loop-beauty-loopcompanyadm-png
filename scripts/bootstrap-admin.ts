@@ -1,10 +1,13 @@
-import prismaModule from "../lib/generated/prisma/client.js";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+/**
+ * Bootstrap script: creates the initial ADMIN user after a fresh
+ * LoopTools provisioning. Env vars come from the deploy engine.
+ *
+ * Reads DATABASE_URL via prisma.config.ts — no manual adapter, no
+ * hardcoded SQLite path. Works against whatever Postgres the engine
+ * injected (a Neon branch in practice).
+ */
+import { PrismaClient } from "../lib/generated/prisma/client";
 import bcrypt from "bcryptjs";
-import path from "node:path";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { PrismaClient } = prismaModule as any;
 
 async function bootstrap() {
   const email = process.env.INITIAL_ADMIN_EMAIL;
@@ -17,8 +20,7 @@ async function bootstrap() {
     return;
   }
 
-  const adapter = new PrismaBetterSqlite3({ url: path.resolve("dev.db") });
-  const prisma = new PrismaClient({ adapter });
+  const prisma = new PrismaClient();
 
   try {
     const existing = await prisma.user.findFirst({
